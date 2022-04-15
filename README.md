@@ -4,7 +4,7 @@ RealADSB is an app for airplane tracking that utilizing adsb_hub3 traffic feed.
 
 Currently it's only running on Apple hardware: iPhone, iPad, AppleTV and Apple Watch.
 
-As a big fan of MSX computers I always had an idea to port RealADSB on app but only recently I've purchased Sony MSX2 that can be used for that.
+As a big fan of MSX computers I always had an idea to port RealADSB on it but only recently I've purchased Sony MSX2 that can be used for that.
 
 In order to access traffic feed GR8NET cartridge has to be used.
 
