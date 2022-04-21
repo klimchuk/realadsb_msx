@@ -12,6 +12,8 @@ r1.bas - DEMO version of the application that can run on any MSX2 computer witho
 
 r2.bas - real application that using GR8NET to get traffic feed from local adsb_hub3 server and METAR
 
+BASIC is super slow on MSX and update of 10 airplanes on screen takes more than 20 seconds. I will work on optimization later on.
+
 # Credits
 
 https://www.msx.org/wiki/Category:MSX-BASIC_Instructions 
