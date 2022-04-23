@@ -6,9 +6,12 @@
 #include "fusion-c/header/msx_fusion.h"
 #include "fusion-c/header/vdp_graph2.h"
 #include "fusion-c/header/vdp_circle.h"
+#include "fusion-c/header/gr8net-tcpip.h"
+#include "fusion-c/header/vdp_sprites.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <float.h>
+#include <math.h>
 
 char XA[10][80]; // ICAO24
 float XB[10]; // Latitude
@@ -33,8 +36,61 @@ float Latitude = 40.6924798; // Latitude of the airport
 float Longitude = -74.1686868; // Longitude of the airport
 char IPPort[80] = "192.168.1.153:5567"; // IP:port of adsb_hub3
 
+// Big thanks to https://github.com/aralbrec (z88dk) for giving me an idea
+// x - the number to be converted
+// f - number of digits to follow decimal point
+// *str - output string
+void ftoa(float x, int f,char *str)
+{
+        float scale;           /* scale factor */
+        int i,                          /* copy of f, and # digits before decimal point */
+            d;                              /* a digit */
+
+        if( x < 0.0 ) {
+                *str++ = '-' ;
+                x = -x ;
+        }
+        i = f ;
+        scale = 2.0 ;
+        while ( i-- )
+                scale *= 10.0 ;
+        x += 1.0 / scale ;
+        /* count places before decimal & scale the number */
+        i = 0 ;
+        scale = 1.0 ;
+        while ( x >= scale ) {
+                scale *= 10.0 ;
+                i++ ;
+        }
+	if ( i == 0 )
+	    *str++ = '0';
+
+        while ( i-- ) {
+                /* output digits before decimal */
+                scale = floorf(0.5 + scale * 0.1 ) ;
+                d = ( x / scale ) ;
+                *str++ = d + '0' ;
+                x -= (float)d * scale ;
+        }
+        if ( f <= 0 ) {
+                *str = 0;
+                return ;
+        }
+        *str++ = '.' ;
+        while ( f-- ) {
+                /* output digits after decimal */
+                x *= 10.0 ;
+                d = x;
+                *str++ = d + '0' ;
+                x -= d ;
+        }
+        *str = 0;
+}
+
 void loadSprites()
 {
+    Sprite16();
+
     return;
 }
 
@@ -48,9 +104,63 @@ void showMetar(void)
     return;
 }
 
-void main(void) 
+void changeZoom(void)
+{
+    return;
+}
+
+void loadMetar(void)
+{
+    tcpip_unapi_tcp_conn_parms tcp_conn_parms;
+    tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
+    int a, i;
+    int conn_number;
+    char response[1024];
+    const	char	tcp_data[]={ "GET / HTTP/1.0\r\nUser-Agent: TCP/IP UNAPI test program\r\nAccept: */*;q=0.8\r\nAccept-Language: en-us,en;q=0.5\r\nConnection: close\r\n\r\n" };
+
+    tcp_conn_parms.dest_ip[0]=192;
+	tcp_conn_parms.dest_ip[1]=168;
+	tcp_conn_parms.dest_ip[2]=1;
+	tcp_conn_parms.dest_ip[3]=53;
+	tcp_conn_parms.dest_port=5567;
+	tcp_conn_parms.local_port=-1;
+	tcp_conn_parms.user_timeout=-1;
+	tcp_conn_parms.flags=0;
+	a=tcpip_tcp_open(&tcp_conn_parms, &conn_number);
+	if(a==ERR_OK)
+	{
+		a=tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
+		if(a==ERR_OK)
+		{
+			if(state_tcp_conn_parms.send_free_bytes>=sizeof(tcp_data))
+			{
+				a=tcpip_tcp_send(conn_number,tcp_data,sizeof(tcp_data),0);
+				while((i=tcpip_tcp_state(conn_number,&state_tcp_conn_parms))==ERR_OK)
+				{
+					if((state_tcp_conn_parms.conn_state!=4) && state_tcp_conn_parms.incoming_bytes==0)
+					{
+						PrintString("\r\nTCP session finished");
+						break;
+					}
+					if(state_tcp_conn_parms.incoming_bytes!=0)
+					{
+						a=tcpip_tcp_rcv(conn_number, &response[0], 1024, &tcp_conn_parms);
+						if(a!=ERR_OK) 
+                            break;
+					}
+				}
+			}
+			else PrintString("No enough space in TX buffer");
+		}
+		a=tcpip_tcp_close(conn_number);
+	}
+}
+
+int main(void) 
 {
     char tmpString[80];
+    char latString[15];
+    char lonString[15];
     
     Screen(0);
     Width(80);
@@ -62,12 +172,20 @@ void main(void)
     printf("Airport ICAO code [%s]:", Airport);
     if(InputString(tmpString, 6)==4)
         StrCopy(Airport, tmpString);
-    printf("Your latitude [%f]:", Latitude);
+    ftoa(Latitude,7,latString);
+    printf("Your latitude [%s]:", latString);
     if(InputString(tmpString, 20)>0)
+    {
+        StrCopy(latString, tmpString);
         Latitude = atof(tmpString);
-    printf("Your longitude [%f]:", Longitude);
+    }
+    ftoa(Longitude,7,lonString);
+    printf("Your longitude [%s]:", lonString);
     if(InputString(tmpString, 20)>0)
+    {
+        StrCopy(lonString, tmpString);
         Longitude = atof(tmpString);
+    }
     printf("adsb_hub3 IP:port [%s]:", IPPort);
     if(InputString(tmpString, 80)>0)
         StrCopy(IPPort, tmpString);
@@ -86,8 +204,19 @@ void main(void)
     Circle(256,106,210,15,0);
 
     // Left top corner
-    Locate(2,2);
-    PrintString(Airport);
+    PutText(2,2,Airport,0);
+    PutText(2,12,latString,0);
+    PutText(2,22,lonString,0);
+
+    changeZoom();
+
+    // Right bottom corner
+    PutText(435,182,"L - List",0);
+    PutText(435,192,"M - METAR",0);
+    PutText(435,202,"Q - Quit",0);
+
+    // Right top corner
+    PutText(365,2,IPPort,0);
 
     while(1)
     {
@@ -102,7 +231,7 @@ void main(void)
         if(key=='q' || key=='Q')
         {
             Screen(0);
-            Exit(0);
+            return 0;
         }
     }
 }
