@@ -28,13 +28,18 @@ char XL[10][80]; // Owner or operator
 float XM[10]; // Distance, mi
 
 char Selected[6]="";
+int SelIndex;
 int Zoom = 20; // Zoom, mi
+float ZX, ZY;
 
 char CfgName[80] = "B:REALADSB.CFG"; // Name of configuration file
 char Airport[6] = "KEWR"; // ICAO code of the airport
 float Latitude = 40.6924798; // Latitude of the airport
 float Longitude = -74.1686868; // Longitude of the airport
 char IPPort[80] = "192.168.1.153:5567"; // IP:port of adsb_hub3
+
+char tmpString[80];
+
 
 // Big thanks to https://github.com/aralbrec (z88dk) for giving me an idea
 // x - the number to be converted
@@ -106,6 +111,10 @@ void showMetar(void)
 
 void changeZoom(void)
 {
+    sprintf(tmpString,"R: %dmi  ",Zoom);
+    PutText(435,172,tmpString,0);
+    ZX=69.172*cosf(Latitude*3.14159/180)*1.05/(float)Zoom;
+    ZY=69*1.05/(float)Zoom;
     return;
 }
 
@@ -156,9 +165,27 @@ void loadMetar(void)
 	}
 }
 
+void loadTraffic(void)
+{
+    
+
+}
+
+void showSelected()
+{
+    // Copy ICAO code of aircraft
+    StrCopy(Selected, XA[SelIndex]);
+    PutText(2,162,XE[SelIndex],0);
+    PutText(2,172,XI[SelIndex],0);
+    PutText(2,182,XJ[SelIndex],0);
+    sprintf(tmpString,"%dft %d", XD[SelIndex], XH[SelIndex]);
+    PutText(2,192,tmpString,0);
+    sprintf(tmpString,"%dkts", XG[SelIndex]);
+    PutText(2,202,tmpString,0);
+}
+
 int main(void) 
 {
-    char tmpString[80];
     char latString[15];
     char lonString[15];
     
@@ -227,6 +254,24 @@ int main(void)
         else
         if(key=='m' || key=='M')
             showMetar();
+        else
+        if(key>47 && key<58)
+        {
+            SelIndex = key-48;
+            showSelected();
+        }
+        else
+        if(key==30 && Zoom>5)
+        {
+            Zoom = Zoom / 2;
+            changeZoom();
+        }
+        else
+        if(key==31 && Zoom<160)
+        {
+            Zoom = Zoom * 2;
+            changeZoom();
+        }
         else
         if(key=='q' || key=='Q')
         {
