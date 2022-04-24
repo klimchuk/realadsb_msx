@@ -13,18 +13,18 @@
 #include <float.h>
 #include <math.h>
 
-char XA[10][80]; // ICAO24
+char XA[10][10]; // ICAO24
 float XB[10]; // Latitude
 float XC[10]; // Longitude
 int XD[10]; // Altitude, ft
-char XE[10][80]; // Callsign
+char XE[10][12]; // Callsign
 int XF[10]; // Heading
 int XG[10]; // Speed, kts
 int XH[10]; // Vertical speed, ft/min
-char XI[10][80]; // Aircraft type
-char XJ[10][80]; // Tail number
+char XI[10][6]; // Aircraft type
+char XJ[10][20]; // Tail number
 int XK[10]; // Squawk
-char XL[10][80]; // Owner or operator
+char XL[10][20]; // Owner or operator
 float XM[10]; // Distance, mi
 
 char Selected[6]="";
@@ -101,17 +101,46 @@ void loadSprites()
 
 void showList(void)
 {
-    return;
+    int i;
+    // Hide all sprites
+    for(i=0; i<20; i++)
+        PutSprite(i,0,-32,-32,15);
+
+    SetColors(10,1,4);
+    BoxFill(20,20,492,192,1,0);
+
+    PutText(30, 25, "Nearest airplanes", 0);
+    PutText(30, 43, "Callsign  Type  Tail      Alt,ft     Speed,kts  Dist,mi", 0);
+    
+    while(1)
+    {
+        unsigned char key = WaitKey();
+        if(key==27)
+            break;
+    }
 }
 
 void showMetar(void)
 {
-    return;
+    int i;
+    // Hide all sprites
+    for(i=0; i<20; i++)
+        PutSprite(i,0,-32,-32,15);
+
+    SetColors(10,1,4);
+    BoxFill(20,20,492,192,1,0);
+
+    while(1)
+    {
+        unsigned char key = WaitKey();
+        if(key==27)
+            break;
+    }
 }
 
 void changeZoom(void)
 {
-    sprintf(tmpString,"R: %dmi  ",Zoom);
+    sprintf(tmpString,"R:  %dmi  ",Zoom);
     PutText(435,172,tmpString,0);
     ZX=69.172*cosf(Latitude*3.14159/180)*1.05/(float)Zoom;
     ZY=69*1.05/(float)Zoom;
@@ -191,7 +220,7 @@ int main(void)
     
     Screen(0);
     Width(80);
-    PrintString("RealADSB 0.3 for MSX\r\n");
+    PrintString("RealADSB 0.3 for MSX-DOS\r\n");
     PrintString("--------------------\r\n");
     PrintString("Requires GR8NET cartridge for network access\r\n");
     printf("Loading configuration from %s...\r\n", CfgName);
@@ -221,62 +250,71 @@ int main(void)
 
     loadSprites();
     
-    SetColors(15,4,4);
-    Cls();
-
-    // Draw radar
-    Line(256-210,106,256+210,106,15,0);
-    Line(256,2,256,210,15,0);
-    Circle(256,106,105,15,0);
-    Circle(256,106,210,15,0);
-
-    // Left top corner
-    PutText(2,2,Airport,0);
-    PutText(2,12,latString,0);
-    PutText(2,22,lonString,0);
-
-    changeZoom();
-
-    // Right bottom corner
-    PutText(435,182,"L - List",0);
-    PutText(435,192,"M - METAR",0);
-    PutText(435,202,"Q - Quit",0);
-
-    // Right top corner
-    PutText(365,2,IPPort,0);
-
     while(1)
     {
-        unsigned char key = WaitKey();
-    
-        if(key=='l' || key=='L')
-            showList();
-        else
-        if(key=='m' || key=='M')
-            showMetar();
-        else
-        if(key>47 && key<58)
+        SetColors(15,4,4);
+        Cls();
+
+        // Draw radar
+        Line(256-210,106,256+210,106,15,0);
+        Line(256,2,256,210,15,0);
+        Circle(256,106,105,15,0);
+        Circle(256,106,210,15,0);
+
+        // Left top corner
+        PutText(2,2,Airport,0);
+        PutText(2,12,latString,0);
+        PutText(2,22,lonString,0);
+
+        changeZoom();
+
+        // Right bottom corner
+        PutText(435,182,"L - List",0);
+        PutText(435,192,"M - METAR",0);
+        PutText(435,202,"Q - Quit",0);
+
+        // Right top corner
+        PutText(365,2,IPPort,0);
+
+        while(1)
         {
-            SelIndex = key-48;
-            showSelected();
-        }
-        else
-        if(key==30 && Zoom>5)
-        {
-            Zoom = Zoom / 2;
-            changeZoom();
-        }
-        else
-        if(key==31 && Zoom<160)
-        {
-            Zoom = Zoom * 2;
-            changeZoom();
-        }
-        else
-        if(key=='q' || key=='Q')
-        {
-            Screen(0);
-            return 0;
+            unsigned char key = WaitKey();
+        
+            if(key=='l' || key=='L')
+            {
+                showList();
+                break;
+            }
+            else
+            if(key=='m' || key=='M')
+            {
+                showMetar();
+                break;
+            }
+            else
+            if(key>47 && key<58)
+            {
+                SelIndex = key-48;
+                showSelected();
+            }
+            else
+            if(key==30 && Zoom>5)
+            {
+                Zoom = Zoom / 2;
+                changeZoom();
+            }
+            else
+            if(key==31 && Zoom<160)
+            {
+                Zoom = Zoom * 2;
+                changeZoom();
+            }
+            else
+            if(key=='q' || key=='Q')
+            {
+                Screen(0);
+                return 0;
+            }
         }
     }
 }
