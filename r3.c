@@ -40,6 +40,9 @@ float Longitude = -74.1686868; // Longitude of the airport
 char IPPort[80] = "192.168.1.153:5567"; // IP:port of adsb_hub3
 
 char tmpString[256];
+char latString[15];
+char lonString[15];
+    
 
 FCB file;
 
@@ -300,29 +303,118 @@ void FT_SetName( FCB *p_fcb, const char *p_name )
   }
 }
 
+void loadConfiguration()
+{
+    unsigned int n, pos, index=0, dstpos=0;
+    char ch;
+    char newline=0;
+
+    FT_SetName(&file, CfgName);
+    // Trying to open
+    if(fcb_open(&file) == FCB_SUCCESS)
+    {
+        n = fcb_read(&file, tmpString, sizeof(tmpString));
+        if(n>0)
+        {
+            for(pos=0; pos<n; pos++)
+            {
+                ch = tmpString[pos];
+                if(IsAlpha(ch)>0 || IsDigit(ch)>0 || ch=='-' || ch=='.' || ch==':')
+                {
+                    // Add character
+                    if(index==0)
+                        Airport[dstpos] = ch;
+                    else
+                    if(index==1)
+                        latString[dstpos] = ch;
+                    else
+                    if(index==2)
+                        lonString[dstpos] = ch;
+                    else
+                    if(index==3)
+                        IPPort[dstpos] = ch;
+                    dstpos++;
+                    newline = 1;
+                }
+                else
+                {
+                    if(newline==1)
+                    {
+                        if(index==0)
+                        {
+                            Airport[dstpos] = 0;
+                            //printf("%s ", Airport);
+                        }
+                        else
+                        if(index==1)
+                        {
+                            latString[dstpos] = 0;
+                            //printf("%s ", latString);
+                        }
+                        else
+                        if(index==2)
+                        {
+                            lonString[dstpos] = 0;
+                            //printf("%s ", lonString);
+                        }
+                        else
+                        if(index==3)
+                        {
+                            IPPort[dstpos] = 0;
+                            //printf("%s ", IPPort);
+                        }
+                        newline=0;
+                        dstpos=0;
+                        index++;
+                    }
+                }
+            }
+        }
+        fcb_close(&file);
+    }
+}
+
+void saveConfiguration()
+{
+    FT_SetName(&file, CfgName);
+    // Trying to open
+    if(fcb_open(&file) != FCB_SUCCESS)
+    {
+        // Can't open then create
+        if(fcb_create(&file) != FCB_SUCCESS)
+        {
+            printf("ERROR");
+            return;
+        }
+    }
+    fcb_write(&file, tmpString, strlen(tmpString));
+    fcb_close(&file);
+    printf("OK\r\nPress any key...");
+}
+
 int main(void) 
 {
-    char latString[15];
-    char lonString[15];
-    
     Screen(0);
     Width(80);
     PrintString("RealADSB 0.3 for MSX-DOS\r\n");
     PrintString("--------------------\r\n");
     PrintString("Requires GR8NET cartridge for network access\r\n");
+
+    // Load configuration
+    ftoa(Latitude,7,latString);
+    ftoa(Longitude,7,lonString);
     printf("Loading configuration from %s...\r\n", CfgName);
+    loadConfiguration();
     //
     printf("Airport ICAO code [%s]:", Airport);
     if(InputString(tmpString, 6)==4)
         StrCopy(Airport, tmpString);
-    ftoa(Latitude,7,latString);
     printf("Your latitude [%s]:", latString);
     if(InputString(tmpString, 20)>0)
     {
         StrCopy(latString, tmpString);
         Latitude = atof(tmpString);
     }
-    ftoa(Longitude,7,lonString);
     printf("Your longitude [%s]:", lonString);
     if(InputString(tmpString, 20)>0)
     {
@@ -338,25 +430,7 @@ int main(void)
     // Save configuration
     sprintf(tmpString,"%s\r\n%s\r\n%s\r\n%s\r\n", 
         Airport, latString, lonString, IPPort);
-    while(1)
-    {
-        FT_SetName(&file, CfgName);
-        // Trying to open
-        if(fcb_open(&file) != FCB_SUCCESS)
-        {
-            // Can't open then create
-            if(fcb_create(&file) != FCB_SUCCESS)
-            {
-                printf("ERROR");
-                break;
-            }
-        }
-        fcb_write(&file, tmpString, strlen(tmpString));
-        fcb_close(&file);
-        printf("OK\r\nPress any key...");
-        break;
-    }
-
+    saveConfiguration();
     InputString(tmpString, 80);
 
     // Setting 512x212 16 colors
