@@ -45,7 +45,8 @@ char latString[15];
 char lonString[15];
 
 FCB file;
-
+tcpip_unapi_tcp_conn_parms tcp_conn_parms;
+	
 // Sprites
 // Airplane up
 static const unsigned char spriteUp[] = {0x00,0x01,0x01,0x01,0x01,0x01,0x07,0x1F,
@@ -139,7 +140,45 @@ void ftoa(float x, int f,char *str)
         *str = 0;
 }
 
-void loadSprites()
+void initConnection(void)
+{
+    int i, index=0, pos=0;
+
+    for(i=0; i<strlen(IPPort); i++)
+    {
+        char ch = IPPort[i];
+        if(IsDigit(ch))
+        {
+            tmpString[pos]=ch;
+            pos++;
+        }
+        else
+        {
+            tmpString[pos]=0;
+            if(index==0)
+                tcp_conn_parms.dest_ip[0]=atoi(tmpString);
+            else
+            if(index==1)
+                tcp_conn_parms.dest_ip[1]=atoi(tmpString);
+            else
+            if(index==2)
+                tcp_conn_parms.dest_ip[2]=atoi(tmpString);
+            else
+            if(index==3)
+                tcp_conn_parms.dest_ip[3]=atoi(tmpString);
+            index++;
+            pos=0;
+        }
+    }
+    if(pos>0)
+        tcp_conn_parms.dest_port=atoi(tmpString);
+
+	tcp_conn_parms.local_port=-1;
+	tcp_conn_parms.user_timeout=-1;
+	tcp_conn_parms.flags=0;
+}
+
+void loadSprites(void)
 {
     SpriteReset();
 
@@ -201,23 +240,12 @@ void showList(void)
     }
 }
 
-void showMetar(void)
+void showStaticMetar(void)
 {
-    char i;
     char offset=0;
     char line=0;
     int pos;
     char *metar = "2022/04/09 00:51\r\nKEWR 090051Z 17006KT 10SM FEW060 14/M01 A2968 RMK AO2 PK WND 30028/1340 SLP088 T00891044";
-
-    // Hide all sprites
-    for(i=0; i<20; i++)
-        PutSprite(i,0,-32,-32,15);
-
-    SetColors(10,1,4);
-    BoxFill(20,20,492,192,1,0);
-    sprintf(tmpString,"METAR for %s", Airport);
-    PutText(30,25,tmpString,0);
-    Line(30,35,482,35,10,0);
 
     for(pos=0;pos<strlen(metar);pos++)
     {
@@ -250,6 +278,104 @@ void showMetar(void)
         tmpString[offset] = 0;
         PutText(30,40+line*12,tmpString,0);
     }
+}
+
+void showNetworkMetar(void)
+{
+    tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
+    int a, i;
+    int conn_number;
+    char response[1024];
+
+    char offset=0;
+    char line=0;
+    int pos;
+
+    sprintf(tmpString,"GET /metar?icao=%s HTTP/1.0\r\nUser-Agent: RealADSB\r\nAccept: */*\r\nConnection: close\r\n\r\n", Airport);
+
+    a=tcpip_tcp_open(&tcp_conn_parms, &conn_number);
+	if(a==ERR_OK)
+	{
+		a=tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
+		if(a==ERR_OK)
+		{
+			if(state_tcp_conn_parms.send_free_bytes>=sizeof(tmpString))
+			{
+				a=tcpip_tcp_send(conn_number,tmpString,sizeof(tmpString),0);
+				while((i=tcpip_tcp_state(conn_number,&state_tcp_conn_parms))==ERR_OK)
+				{
+					if((state_tcp_conn_parms.conn_state!=4) && state_tcp_conn_parms.incoming_bytes==0)
+					{
+						PutText(30,40,"TCP session finished",0);
+						break;
+					}
+					if(state_tcp_conn_parms.incoming_bytes!=0)
+					{
+						a=tcpip_tcp_rcv(conn_number, &response[0], 1024, &tcp_conn_parms);
+						if(a!=ERR_OK) 
+                            break;
+                        // Output
+                        for(pos=0;pos<state_tcp_conn_parms.incoming_bytes;pos++)
+                        {
+                            char ch=response[pos];
+                            if(ch=='\r' || ch=='\n')
+                            {
+                                if(offset>0)
+                                {
+                                    tmpString[offset] = 0;
+                                    PutText(30,40+line*12,tmpString,0);
+                                    line++;
+                                    offset = 0;
+                                }
+                            }
+                            else
+                            {
+                                tmpString[offset] = ch;
+                                offset++;
+                                if(offset==50)
+                                {
+                                    tmpString[offset] = 0;
+                                    PutText(30,40+line*12,tmpString,0);
+                                    line++;
+                                    offset = 0;
+                                }
+                            }
+                        }
+					}
+				}
+			}
+			else PutText(30,40,"No enough space in TX buffer",0);
+		}
+        if(offset>0)
+        {
+            tmpString[offset] = 0;
+            PutText(30,40+line*12,tmpString,0);
+        }
+
+		a=tcpip_tcp_close(conn_number);
+	}
+    else
+    {
+        PutText(30,40,"Can't connect",0);
+    }
+}
+
+void showMetar(void)
+{
+    char i;
+
+    // Hide all sprites
+    for(i=0; i<20; i++)
+        PutSprite(i,0,-32,-32,15);
+
+    SetColors(10,1,4);
+    BoxFill(20,20,492,192,1,0);
+    sprintf(tmpString,"METAR for %s", Airport);
+    PutText(30,25,tmpString,0);
+    Line(30,35,482,35,10,0);
+
+    //showStaticMetar();
+    showNetworkMetar();
 
     while(1)
     {
@@ -266,53 +392,6 @@ void changeZoom(void)
     ZX=69.172*cosf(Latitude*3.14159/180)*1.05/(float)Zoom;
     ZY=69*1.05/(float)Zoom;
     return;
-}
-
-void loadMetar(void)
-{
-    tcpip_unapi_tcp_conn_parms tcp_conn_parms;
-    tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
-    int a, i;
-    int conn_number;
-    char response[1024];
-    const	char	tcp_data[]={ "GET / HTTP/1.0\r\nUser-Agent: TCP/IP UNAPI test program\r\nAccept: */*;q=0.8\r\nAccept-Language: en-us,en;q=0.5\r\nConnection: close\r\n\r\n" };
-
-    tcp_conn_parms.dest_ip[0]=192;
-	tcp_conn_parms.dest_ip[1]=168;
-	tcp_conn_parms.dest_ip[2]=1;
-	tcp_conn_parms.dest_ip[3]=53;
-	tcp_conn_parms.dest_port=5567;
-	tcp_conn_parms.local_port=-1;
-	tcp_conn_parms.user_timeout=-1;
-	tcp_conn_parms.flags=0;
-	a=tcpip_tcp_open(&tcp_conn_parms, &conn_number);
-	if(a==ERR_OK)
-	{
-		a=tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
-		if(a==ERR_OK)
-		{
-			if(state_tcp_conn_parms.send_free_bytes>=sizeof(tcp_data))
-			{
-				a=tcpip_tcp_send(conn_number,tcp_data,sizeof(tcp_data),0);
-				while((i=tcpip_tcp_state(conn_number,&state_tcp_conn_parms))==ERR_OK)
-				{
-					if((state_tcp_conn_parms.conn_state!=4) && state_tcp_conn_parms.incoming_bytes==0)
-					{
-						PrintString("\r\nTCP session finished");
-						break;
-					}
-					if(state_tcp_conn_parms.incoming_bytes!=0)
-					{
-						a=tcpip_tcp_rcv(conn_number, &response[0], 1024, &tcp_conn_parms);
-						if(a!=ERR_OK) 
-                            break;
-					}
-				}
-			}
-			else PrintString("No enough space in TX buffer");
-		}
-		a=tcpip_tcp_close(conn_number);
-	}
 }
 
 void loadTraffic(void)
@@ -489,6 +568,9 @@ int main(void)
     // Setting 512x212 16 colors
     Screen(7);
 
+    // Initialize connection parameters
+    initConnection();
+    
     loadSprites();
     
     while(1)
@@ -506,7 +588,8 @@ int main(void)
         Circle(256,106,210,15,0);
 
         // Left top corner
-        PutText(2,2,Airport,0);
+        sprintf(tmpString,"Airport: %s", Airport);
+        PutText(2,2,tmpString,0);
         PutText(2,12,latString,0);
         PutText(2,22,lonString,0);
 
@@ -518,7 +601,8 @@ int main(void)
         PutText(435,202,"Q - Quit",0);
 
         // Right top corner
-        PutText(365,2,IPPort,0);
+        sprintf(tmpString,"%d.%d.%d.%d:%d", tcp_conn_parms.dest_ip[0], tcp_conn_parms.dest_ip[1], tcp_conn_parms.dest_ip[2], tcp_conn_parms.dest_ip[3], tcp_conn_parms.dest_port);
+        PutText(365,2,tmpString,0);
 
         while(1)
         {
