@@ -14,6 +14,7 @@
 #include <float.h>
 #include <math.h>
 
+char NumberOfAirplanes;
 char XA[10][10]; // ICAO24
 float XB[10]; // Latitude
 float XC[10]; // Longitude
@@ -42,7 +43,6 @@ char IPPort[80] = "192.168.1.153:5567"; // IP:port of adsb_hub3
 char tmpString[256];
 char latString[15];
 char lonString[15];
-    
 
 FCB file;
 
@@ -169,7 +169,7 @@ void loadSprites()
 
 void showList(void)
 {
-    int i;
+    char i;
     // Hide all sprites
     for(i=0; i<20; i++)
         PutSprite(i,0,-32,-32,15);
@@ -179,6 +179,19 @@ void showList(void)
 
     PutText(30, 25, "Nearest airplanes", 0);
     PutText(30, 43, "Callsign  Type  Tail      Alt,ft     Speed,kts  Dist,mi", 0);
+
+    for(i=0; i<NumberOfAirplanes; i++)
+    {
+        PutText(30,55+i*12,XE[i],0);
+        PutText(110,55+i*12,XI[i],0);
+        PutText(158,55+i*12,XJ[i],0);
+        sprintf(tmpString,"%d/%d",XD[i],XH[i]);
+        PutText(230,55+i*12,tmpString,0);
+        sprintf(tmpString,"%d",XG[i]);
+        PutText(342,55+i*12,tmpString,0);
+        ftoa(XM[i],2,tmpString);
+        PutText(422,55+i*12,tmpString,0);
+    }
     
     while(1)
     {
@@ -190,13 +203,53 @@ void showList(void)
 
 void showMetar(void)
 {
-    int i;
+    char i;
+    char offset=0;
+    char line=0;
+    int pos;
+    char *metar = "2022/04/09 00:51\r\nKEWR 090051Z 17006KT 10SM FEW060 14/M01 A2968 RMK AO2 PK WND 30028/1340 SLP088 T00891044";
+
     // Hide all sprites
     for(i=0; i<20; i++)
         PutSprite(i,0,-32,-32,15);
 
     SetColors(10,1,4);
     BoxFill(20,20,492,192,1,0);
+    sprintf(tmpString,"METAR for %s", Airport);
+    PutText(30,25,tmpString,0);
+    Line(30,35,482,35,10,0);
+
+    for(pos=0;pos<strlen(metar);pos++)
+    {
+        char ch=metar[pos];
+        if(ch=='\r' || ch=='\n')
+        {
+            if(offset>0)
+            {
+                tmpString[offset] = 0;
+                PutText(30,40+line*12,tmpString,0);
+                line++;
+                offset = 0;
+            }
+        }
+        else
+        {
+            tmpString[offset] = ch;
+            offset++;
+            if(offset==50)
+            {
+                tmpString[offset] = 0;
+                PutText(30,40+line*12,tmpString,0);
+                line++;
+                offset = 0;
+            }
+        }
+    }
+    if(offset>0)
+    {
+        tmpString[offset] = 0;
+        PutText(30,40+line*12,tmpString,0);
+    }
 
     while(1)
     {
