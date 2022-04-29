@@ -15,19 +15,23 @@
 
 char NumberOfAirplanes = 0;
 
-char  XA[10][7]; // ICAO24
-float XB[10]; // Latitude
-float XC[10]; // Longitude
-int XD[10]; // Altitude, ft
-//char *XE[10]; // Callsign
-int XF[10]; // Heading
-int XG[10]; // Speed, kts
-int XH[10]; // Vertical speed, ft/min
-//char *XI[10]; // Aircraft type
-//char *XJ[10]; // Tail number
-//int XK[10]; // Squawk
-//char *XL[10]; // Owner or operator
-//float XM[10]; // Distance, mi
+struct DD {
+    char  XA[7]; // ICAO24
+    float XB; // Latitude
+    float XC; // Longitude
+    int XD; // Altitude, ft
+    char XE[9]; // Callsign
+    int XF; // Heading
+    int XG; // Speed, kts
+    int XH; // Vertical speed, ft/min
+    char XI[5]; // Aircraft type
+    char XJ[10]; // Tail number
+    int XK; // Squawk
+    char XL[10]; // Owner or operator
+    float XM; // Distance, mi
+};
+
+__at 0x8000 struct DD d[10];
 
 char Selected[7]="";
 int SelIndex;
@@ -221,7 +225,7 @@ void showList(void)
 {
     char i;
     // Hide all sprites
-    for(i=0; i<20; i++)
+    for(i=0; i<23; i++)
         PutSprite(i,0,-32,-32,15);
 
     SetColors(10,1,4);
@@ -232,15 +236,15 @@ void showList(void)
 
     for(i=0; i<NumberOfAirplanes; i++)
     {
-        //PutText(30,55+i*12,XE[i],0);
-        //PutText(110,55+i*12,XI[i],0);
-        //PutText(158,55+i*12,XJ[i],0);
-        sprintf(tmpString,"%d/%d",XD[i],XH[i]);
+        PutText(30,55+i*12,d[i].XE,0);
+        PutText(110,55+i*12,d[i].XI,0);
+        PutText(158,55+i*12,d[i].XJ,0);
+        sprintf(tmpString,"%d/%d",d[i].XD,d[i].XH);
         PutText(230,55+i*12,tmpString,0);
-        sprintf(tmpString,"%d",XG[i]);
+        sprintf(tmpString,"%d",d[i].XG);
         PutText(342,55+i*12,tmpString,0);
-        //ftoa(XM[i],2,tmpString);
-        //PutText(422,55+i*12,tmpString,0);
+        ftoa(d[i].XM,2,tmpString);
+        PutText(422,55+i*12,tmpString,0);
     }
     
     while(1)
@@ -476,21 +480,36 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
                                 {
                                     tmpString[offset]=0;
                                     if(item==0)
-                                        StrCopy(XA[NumberOfAirplanes],tmpString);
+                                        StrCopy(d[NumberOfAirplanes].XA,tmpString);
                                     if(item==1)
-                                        XB[NumberOfAirplanes]=atof(tmpString)*100.0-Latitude*100.0;
+                                        d[NumberOfAirplanes].XB=atof(tmpString)*100.0-Latitude*100.0;
                                     if(item==2)
-                                        XC[NumberOfAirplanes]=atof(tmpString)*100.0-Longitude*100.0;
+                                        d[NumberOfAirplanes].XC=atof(tmpString)*100.0-Longitude*100.0;
                                     if(item==3)
-                                        XD[NumberOfAirplanes]=atoi(tmpString);
+                                        d[NumberOfAirplanes].XD=atoi(tmpString);
+                                    if(item==4)
+                                        StrCopy(d[NumberOfAirplanes].XE,tmpString);
                                     if(item==5)
-                                        XF[NumberOfAirplanes]=atoi(tmpString);
+                                        d[NumberOfAirplanes].XF=atoi(tmpString);
                                     if(item==6)
-                                        XG[NumberOfAirplanes]=atoi(tmpString);
+                                        d[NumberOfAirplanes].XG=atoi(tmpString);
                                     if(item==7)
-                                        XH[NumberOfAirplanes]=atoi(tmpString);
-                                    //if(item==12)
-                                      //  XM[NumberOfAirplanes]=atof(tmpString);
+                                        d[NumberOfAirplanes].XH=atoi(tmpString);
+                                    if(item==8)
+                                        StrCopy(d[NumberOfAirplanes].XI,tmpString);
+                                    if(item==9)
+                                        StrCopy(d[NumberOfAirplanes].XJ,tmpString);
+                                    if(item==10)
+                                        d[NumberOfAirplanes].XK=atoi(tmpString);
+                                    if(item==11)
+                                    {
+                                        if(strlen(tmpString)>8)
+                                            strncpy(d[NumberOfAirplanes].XL,tmpString, 8);
+                                        else
+                                            StrCopy(d[NumberOfAirplanes].XL,tmpString);
+                                    }
+                                    if(item==12)
+                                        d[NumberOfAirplanes].XM=atof(tmpString);
                                     offset=0;
                                     item++;
                                 }
@@ -519,15 +538,15 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
     {
         char x,y;
         a=0;
-        if(XF[pos]>44 && XF[pos]<136)
+        if(d[pos].XF>44 && d[pos].XF<136)
             a=4;
-        if(XF[pos]>135 && XF[pos]<226)
+        if(d[pos].XF>135 && d[pos].XF<226)
             a=8;
-        if(XF[pos]>225 && XF[pos]<316)
+        if(d[pos].XF>225 && d[pos].XF<316)
             a=12;
-        x = 120+(char)(XC[pos]*ZX);
-        y = 98-(char)(XB[pos]*ZY);
-        PutSprite(pos,a,x,y,StrCompare(XA[pos],Selected)==0?10:15);
+        x = 120+(char)(d[pos].XC*ZX);
+        y = 98-(char)(d[pos].XB*ZY);
+        PutSprite(pos,a,x,y,StrCompare(d[pos].XA,Selected)==0?10:15);
         PutSprite(pos*2,16+pos*4,x,y,10);
     }
 
@@ -548,14 +567,22 @@ void changeZoom(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 
 void showSelected()
 {
+    char a=0;
+    if(d[SelIndex].XF>44 && d[SelIndex].XF<136)
+        a=4;
+    if(d[SelIndex].XF>135 && d[SelIndex].XF<226)
+        a=8;
+    if(d[SelIndex].XF>225 && d[SelIndex].XF<316)
+        a=12;
+    PutSprite(SelIndex,a,120+(char)(d[SelIndex].XC*ZX),98-(char)(d[SelIndex].XB*ZY),10);
     // Copy ICAO code of aircraft
-    StrCopy(Selected, XA[SelIndex]);
-    /*PutText(2,162,XE[SelIndex],0);
-    PutText(2,172,XI[SelIndex],0);
-    PutText(2,182,XJ[SelIndex],0);*/
-    sprintf(tmpString,"%dft %d", XD[SelIndex], XH[SelIndex]);
+    StrCopy(Selected, d[SelIndex].XA);
+    PutText(2,162,d[SelIndex].XE,0);
+    PutText(2,172,d[SelIndex].XI,0);
+    PutText(2,182,d[SelIndex].XJ,0);
+    sprintf(tmpString,"%dft %d", d[SelIndex].XD, d[SelIndex].XH);
     PutText(2,192,tmpString,0);
-    sprintf(tmpString,"%dkts", XG[SelIndex]);
+    sprintf(tmpString,"%dkts", d[SelIndex].XG);
     PutText(2,202,tmpString,0);
 }
 
@@ -693,8 +720,6 @@ void main(void)
         PutText(2,12,latString,0);
         PutText(2,22,lonString,0);
 
-        changeZoom(&tcp_conn_parms);
-
         // Right bottom corner
         PutText(435,182,"L - List",0);
         PutText(435,192,"M - METAR",0);
@@ -703,6 +728,8 @@ void main(void)
         // Right top corner
         sprintf(tmpString,"%d.%d.%d.%d:%d", tcp_conn_parms.dest_ip[0], tcp_conn_parms.dest_ip[1], tcp_conn_parms.dest_ip[2], tcp_conn_parms.dest_ip[3], tcp_conn_parms.dest_port);
         PutText(365,2,tmpString,0);
+
+        changeZoom(&tcp_conn_parms);
 
         //loadTraffic();
 
