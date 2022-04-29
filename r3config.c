@@ -74,6 +74,7 @@ void FT_SetName( FCB *p_fcb, const char *p_name )
   
   memset( p_fcb, 0, sizeof(FCB) );
   
+  // TODO: Change number to use another drive
   p_fcb->drive_no = 0;
   
   for( i = 0; i < 8; i++ ) {
@@ -184,7 +185,7 @@ void main(void)
     Screen(0);
     Width(80);
     PrintString("RealADSB 0.3 Config for MSX-DOS\r\n");
-    PrintString("------------------------\r\n");
+    PrintString("-------------------------------\r\n");
     
     // Load configuration
     ftoa(Latitude,7,latString);
