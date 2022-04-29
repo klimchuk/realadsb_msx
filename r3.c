@@ -15,21 +15,21 @@
 
 char NumberOfAirplanes = 0;
 
-char *XA[10]; // ICAO24
+char  XA[10][7]; // ICAO24
 float XB[10]; // Latitude
 float XC[10]; // Longitude
 int XD[10]; // Altitude, ft
-char *XE[10]; // Callsign
+//char *XE[10]; // Callsign
 int XF[10]; // Heading
 int XG[10]; // Speed, kts
 int XH[10]; // Vertical speed, ft/min
-char *XI[10]; // Aircraft type
-char *XJ[10]; // Tail number
-int XK[10]; // Squawk
-char *XL[10]; // Owner or operator
-float XM[10]; // Distance, mi
+//char *XI[10]; // Aircraft type
+//char *XJ[10]; // Tail number
+//int XK[10]; // Squawk
+//char *XL[10]; // Owner or operator
+//float XM[10]; // Distance, mi
 
-char Selected[6]="";
+char Selected[7]="";
 int SelIndex;
 int Zoom = 20; // Zoom, mi
 float ZX, ZY;
@@ -40,17 +40,11 @@ float Latitude = 40.6924798; // Latitude of the airport
 float Longitude = -74.1686868; // Longitude of the airport
 char IPPort[80] = "192.168.1.153:5567"; // IP:port of adsb_hub3
 
-char tmpString[256];
+char tmpString[200];
 char latString[15];
 char lonString[15];
 
 TIME tm;
-
-FCB file;
-tcpip_unapi_tcp_conn_parms tcp_conn_parms;
-tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
-
-int conn_number;
 
 // Sprites
 // Airplane up
@@ -145,7 +139,7 @@ void ftoa(float x, int f,char *str)
         *str = 0;
 }
 
-void initConnection(void)
+void initConnection(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 {
     int i, index=0, pos=0;
 
@@ -171,16 +165,16 @@ void initConnection(void)
         {
             tmpString[pos]=0;
             if(index==0)
-                tcp_conn_parms.dest_ip[0]=(char)atoi(tmpString);
+                tcp_conn_parms->dest_ip[0]=(char)atoi(tmpString);
             else
             if(index==1)
-                tcp_conn_parms.dest_ip[1]=(char)atoi(tmpString);
+                tcp_conn_parms->dest_ip[1]=(char)atoi(tmpString);
             else
             if(index==2)
-                tcp_conn_parms.dest_ip[2]=(char)atoi(tmpString);
+                tcp_conn_parms->dest_ip[2]=(char)atoi(tmpString);
             else
             if(index==3)
-                tcp_conn_parms.dest_ip[3]=(char)atoi(tmpString);
+                tcp_conn_parms->dest_ip[3]=(char)atoi(tmpString);
             index++;
             pos=0;
         }
@@ -188,13 +182,13 @@ void initConnection(void)
     if(pos>0)
     {
         tmpString[pos]=0;
-        tcp_conn_parms.dest_port=atoi(tmpString);
+        tcp_conn_parms->dest_port=atoi(tmpString);
     }
 
-	tcp_conn_parms.local_port=-1;
+	tcp_conn_parms->local_port=-1;
     // Timeout 5 seconds
-	tcp_conn_parms.user_timeout=-1;
-	tcp_conn_parms.flags=0;
+	tcp_conn_parms->user_timeout=-1;
+	tcp_conn_parms->flags=0;
 }
 
 void loadSprites(void)
@@ -208,21 +202,19 @@ void loadSprites(void)
     SetSpritePattern(8,spriteDown,32);
     SetSpritePattern(12,spriteLeft,32);
     SetSpritePattern(16,sprite0,32);
-    SetSpritePattern(17,sprite1,32);
-    SetSpritePattern(18,sprite2,32);
-    SetSpritePattern(19,sprite3,32);
-    SetSpritePattern(20,sprite4,32);
-    SetSpritePattern(21,sprite5,32);
-    SetSpritePattern(22,sprite6,32);
-    SetSpritePattern(23,sprite7,32);
-    SetSpritePattern(24,sprite8,32);
-    SetSpritePattern(25,sprite9,32);
+    SetSpritePattern(20,sprite1,32);
+    SetSpritePattern(24,sprite2,32);
+    SetSpritePattern(28,sprite3,32);
+    SetSpritePattern(32,sprite4,32);
+    SetSpritePattern(36,sprite5,32);
+    SetSpritePattern(40,sprite6,32);
+    SetSpritePattern(44,sprite7,32);
+    SetSpritePattern(48,sprite8,32);
+    SetSpritePattern(52,sprite9,32);
 
     SpriteOn();
     Sprite16();
     SpriteSmall();
-
-    return;
 }
 
 void showList(void)
@@ -240,15 +232,15 @@ void showList(void)
 
     for(i=0; i<NumberOfAirplanes; i++)
     {
-        PutText(30,55+i*12,XE[i],0);
-        PutText(110,55+i*12,XI[i],0);
-        PutText(158,55+i*12,XJ[i],0);
+        //PutText(30,55+i*12,XE[i],0);
+        //PutText(110,55+i*12,XI[i],0);
+        //PutText(158,55+i*12,XJ[i],0);
         sprintf(tmpString,"%d/%d",XD[i],XH[i]);
         PutText(230,55+i*12,tmpString,0);
         sprintf(tmpString,"%d",XG[i]);
         PutText(342,55+i*12,tmpString,0);
-        ftoa(XM[i],2,tmpString);
-        PutText(422,55+i*12,tmpString,0);
+        //ftoa(XM[i],2,tmpString);
+        //PutText(422,55+i*12,tmpString,0);
     }
     
     while(1)
@@ -300,11 +292,14 @@ void showStaticMetar(void)
     }
 }*/
 
-void showNetworkMetar(void)
+void showNetworkMetar(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 {
     int a, i, j, k;
-    char tcp_data[1024];
+    char tcp_data[80];
     char response[1024];
+ 
+    tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
+    int conn_number;
 
     // 1 when HTTP content found after \r\n\r\n
     char content=0;
@@ -312,10 +307,10 @@ void showNetworkMetar(void)
     char line=0;
     int pos;
 
-    sprintf(tcp_data,"GET /metar?icao=%s HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", Airport);
-    //const char tcp_data[]={"GET /metar?icao=KEWR HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n"};
-    //const	char	tcp_data[]={ "GET / HTTP/1.0\r\nUser-Agent: TCP/IP UNAPI test program\r\nAccept: */*;q=0.8\r\nAccept-Language: en-us,en;q=0.5\r\nConnection: close\r\n\r\n" };
-    a=tcpip_tcp_open(&tcp_conn_parms, &conn_number);
+    sprintf(tcp_data,"GET /metar?icao=%s HTTP/1.0\r\nAccept: \r\nConnection: close\r\n\r\n", Airport);
+    //const char tcp_data[]={"GET /metar?icao=KEWR HTTP/1.0\r\nAccept: \r\nConnection: close\r\n\r\n"};
+    //const	char	tcp_data[]={ "GET / HTTP/1.0\r\nUser-Agent: TCP/IP UNAPI test program\r\nAccept: ;q=0.8\r\nAccept-Language: en-us,en;q=0.5\r\nConnection: close\r\n\r\n" };
+    a=tcpip_tcp_open(tcp_conn_parms, &conn_number);
 	if(a==ERR_OK || a==ERR_CONN_EXISTS)
 	{
         a = tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
@@ -332,14 +327,14 @@ void showNetworkMetar(void)
                 }
                 if(state_tcp_conn_parms.incoming_bytes!=0)
                 {
-                    a=tcpip_tcp_rcv(conn_number, &response[0], 1024, &tcp_conn_parms);
+                    a=tcpip_tcp_rcv(conn_number, &response[0], 1024, tcp_conn_parms);
                     if(a!=ERR_OK)
                     { 
                         sprintf(tmpString,"ERROR %d",a);
                         PutText(30,52,tmpString,0);
                         break;
                     }
-                    for(pos=0;pos<tcp_conn_parms.incoming_bytes;pos++)
+                    for(pos=0;pos<tcp_conn_parms->incoming_bytes;pos++)
                     {
                         char ch=response[pos];
                         if(ch=='\r' || ch=='\n')
@@ -383,12 +378,12 @@ void showNetworkMetar(void)
 	}
     else
     {
-        sprintf(tmpString,"Can't connect: %d %d %d", a, tcp_conn_parms.conn_state, tcp_conn_parms.close_reason);
+        sprintf(tmpString,"Can't connect: %d", a);
         PutText(30,40,tmpString,0);
     }
 }
 
-void showMetar(void)
+void showMetar(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 {
     char i;
 
@@ -403,7 +398,7 @@ void showMetar(void)
     Line(30,35,482,35,10,0);
 
     //showStaticMetar();
-    showNetworkMetar();
+    showNetworkMetar(tcp_conn_parms);
 
     while(1)
     {
@@ -413,33 +408,151 @@ void showMetar(void)
     }
 }
 
-void changeZoom(void)
+void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 {
-    sprintf(tmpString,"R:  %dmi  ",Zoom);
-    PutText(435,172,tmpString,0);
-    ZX=69.172*cosf(Latitude*3.14159/180)*1.05/(float)Zoom;
-    ZY=69*1.05/(float)Zoom;
-    return;
-}
+    int a, j, k;
+    char tcp_data[120];
+    char response[1024];
 
-void loadTraffic(void)
-{
+    tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
+    int conn_number;
+
+    // 1 when HTTP content found after \r\n\r\n
+    char content=0;
+    char offset=0;
+    char item=0;
+    int pos;
+    NumberOfAirplanes=0;
+
     GetTime(&tm);
     sprintf(tmpString,"%d:%d:%d*",tm.hour,tm.min,tm.sec);
     PutText(405,12,tmpString,0);
+
+    sprintf(tcp_data,"GET /a?lat=%s&lon=%s&num=10 HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", latString, lonString);
+    a=tcpip_tcp_open(tcp_conn_parms, &conn_number);
+	if(a==ERR_OK || a==ERR_CONN_EXISTS)
+	{
+        a = tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
+        if(state_tcp_conn_parms.send_free_bytes>=sizeof(tcp_data))
+        {
+            a=tcpip_tcp_send(conn_number,tcp_data,sizeof(tcp_data),0);
+            for(k=0;k<100;k++)
+            {
+                j = tcpip_tcp_state(conn_number,&state_tcp_conn_parms);
+                if(state_tcp_conn_parms.conn_state!=4 && state_tcp_conn_parms.incoming_bytes==0)
+                {
+                    //PrintString("\r\nTCP session finished");
+                    break;
+                }
+                if(state_tcp_conn_parms.incoming_bytes!=0)
+                {
+                    a=tcpip_tcp_rcv(conn_number, &response[0], 1024, tcp_conn_parms);
+                    if(a!=ERR_OK)
+                    { 
+                        //sprintf(tmpString,"ERROR %d",a);
+                        //PutText(30,52,tmpString,0);
+                        break;
+                    }
+                    for(pos=0;pos<tcp_conn_parms->incoming_bytes;pos++)
+                    {
+                        char ch=response[pos];
+                        if(ch=='\r' || ch=='\n')
+                        {
+                            if(content==1 && offset>0)
+                            {
+                                NumberOfAirplanes++;
+                                item=0;
+                                offset = 0;
+                            }
+                            if(pos>2 && content==0 && ch=='\n' && response[pos-2]=='\n')
+                                content = 1;
+                        }
+                        else
+                        if(content==1)
+                        {
+                            if(ch=='|')
+                            {
+                                if(offset>0)
+                                {
+                                    tmpString[offset]=0;
+                                    if(item==0)
+                                        StrCopy(XA[NumberOfAirplanes],tmpString);
+                                    if(item==1)
+                                        XB[NumberOfAirplanes]=atof(tmpString)*100.0-Latitude*100.0;
+                                    if(item==2)
+                                        XC[NumberOfAirplanes]=atof(tmpString)*100.0-Longitude*100.0;
+                                    if(item==3)
+                                        XD[NumberOfAirplanes]=atoi(tmpString);
+                                    if(item==5)
+                                        XF[NumberOfAirplanes]=atoi(tmpString);
+                                    if(item==6)
+                                        XG[NumberOfAirplanes]=atoi(tmpString);
+                                    if(item==7)
+                                        XH[NumberOfAirplanes]=atoi(tmpString);
+                                    //if(item==12)
+                                      //  XM[NumberOfAirplanes]=atof(tmpString);
+                                    offset=0;
+                                    item++;
+                                }
+                            }
+                            else
+                            {
+                                tmpString[offset] = ch;
+                                offset++;
+                            }
+                        }
+                    }
+                }
+                //for(i=0;i<1000;i++);		// delay
+            }
+        }
+
+		a=tcpip_tcp_close(conn_number);
+	}
+    else
+    {
+        sprintf(tmpString,"Can't connect: %d", a);
+        PutText(30,40,tmpString,0);
+    }
+
+    for(pos=0;pos<NumberOfAirplanes;pos++)
+    {
+        char x,y;
+        a=0;
+        if(XF[pos]>44 && XF[pos]<136)
+            a=4;
+        if(XF[pos]>135 && XF[pos]<226)
+            a=8;
+        if(XF[pos]>225 && XF[pos]<316)
+            a=12;
+        x = 120+(char)(XC[pos]*ZX);
+        y = 98-(char)(XB[pos]*ZY);
+        PutSprite(pos,a,x,y,StrCompare(XA[pos],Selected)==0?10:15);
+        PutSprite(pos*2,16+pos*4,x,y,10);
+    }
 
     GetTime(&tm);
     sprintf(tmpString,"%d:%d:%d ",tm.hour,tm.min,tm.sec);
     PutText(405,12,tmpString,0);
 }
 
+void changeZoom(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
+{
+    sprintf(tmpString,"R:  %dmi  ",Zoom);
+    PutText(435,172,tmpString,0);
+    ZX=69.172*cosf(Latitude*3.14159/180)*1.05/(float)Zoom;
+    ZY=69*1.05/(float)Zoom;
+    loadTraffic(tcp_conn_parms);
+    return;
+}
+
 void showSelected()
 {
     // Copy ICAO code of aircraft
     StrCopy(Selected, XA[SelIndex]);
-    PutText(2,162,XE[SelIndex],0);
+    /*PutText(2,162,XE[SelIndex],0);
     PutText(2,172,XI[SelIndex],0);
-    PutText(2,182,XJ[SelIndex],0);
+    PutText(2,182,XJ[SelIndex],0);*/
     sprintf(tmpString,"%dft %d", XD[SelIndex], XH[SelIndex]);
     PutText(2,192,tmpString,0);
     sprintf(tmpString,"%dkts", XG[SelIndex]);
@@ -470,6 +583,7 @@ void FT_SetName( FCB *p_fcb, const char *p_name )
 
 void loadConfiguration()
 {
+    FCB file;
     unsigned int n, pos, index=0, dstpos=0;
     char ch;
     char newline=0;
@@ -541,6 +655,8 @@ void loadConfiguration()
 
 void main(void) 
 {
+    tcpip_unapi_tcp_conn_parms tcp_conn_parms;
+
     Screen(0);
     Width(80);
     PrintString("RealADSB 0.3 for MSX-DOS\r\n");
@@ -553,7 +669,7 @@ void main(void)
     loadConfiguration();
 
     // Initialize connection parameters
-    initConnection();
+    initConnection(&tcp_conn_parms);
 
     // Setting 512x212 16 colors
     Screen(7);
@@ -564,9 +680,6 @@ void main(void)
     {
         SetColors(15,4,4);
         Cls();
-
-        // TEST
-     //   PutSprite(0,12,10,10,15);
 
         // Draw radar
         Line(256-210,106,256+210,106,15,0);
@@ -580,7 +693,7 @@ void main(void)
         PutText(2,12,latString,0);
         PutText(2,22,lonString,0);
 
-        changeZoom();
+        changeZoom(&tcp_conn_parms);
 
         // Right bottom corner
         PutText(435,182,"L - List",0);
@@ -591,7 +704,7 @@ void main(void)
         sprintf(tmpString,"%d.%d.%d.%d:%d", tcp_conn_parms.dest_ip[0], tcp_conn_parms.dest_ip[1], tcp_conn_parms.dest_ip[2], tcp_conn_parms.dest_ip[3], tcp_conn_parms.dest_port);
         PutText(365,2,tmpString,0);
 
-        loadTraffic();
+        //loadTraffic();
 
         while(1)
         {
@@ -605,26 +718,26 @@ void main(void)
             else
             if(key=='m' || key=='M')
             {
-                showMetar();
+                showMetar(&tcp_conn_parms);
                 break;
             }
             else
             if(key>47 && key<58)
             {
                 SelIndex = key-48;
- //               showSelected();
+                showSelected();
             }
             else
             if(key==30 && Zoom>5)
             {
                 Zoom = Zoom / 2;
-                changeZoom();
+                changeZoom(&tcp_conn_parms);
             }
             else
             if(key==31 && Zoom<160)
             {
                 Zoom = Zoom * 2;
-                changeZoom();
+                changeZoom(&tcp_conn_parms);
             }
             else
             if(key=='q' || key=='Q')
