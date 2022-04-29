@@ -5,7 +5,6 @@
 
 #include "fusion-c/header/msx_fusion.h"
 #include "fusion-c/header/vdp_graph2.h"
-#include "fusion-c/header/vdp_circle.h"
 #include "fusion-c/header/gr8net-tcpip.h"
 #include "fusion-c/header/vdp_sprites.h"
 #include <stdio.h>
@@ -14,19 +13,20 @@
 #include <float.h>
 #include <math.h>
 
-char NumberOfAirplanes;
-char XA[10][10]; // ICAO24
+char NumberOfAirplanes = 0;
+
+char *XA[10]; // ICAO24
 float XB[10]; // Latitude
 float XC[10]; // Longitude
 int XD[10]; // Altitude, ft
-char XE[10][12]; // Callsign
+char *XE[10]; // Callsign
 int XF[10]; // Heading
 int XG[10]; // Speed, kts
 int XH[10]; // Vertical speed, ft/min
-char XI[10][6]; // Aircraft type
-char XJ[10][20]; // Tail number
+char *XI[10]; // Aircraft type
+char *XJ[10]; // Tail number
 int XK[10]; // Squawk
-char XL[10][20]; // Owner or operator
+char *XL[10]; // Owner or operator
 float XM[10]; // Distance, mi
 
 char Selected[6]="";
@@ -44,9 +44,14 @@ char tmpString[256];
 char latString[15];
 char lonString[15];
 
+TIME tm;
+
 FCB file;
 tcpip_unapi_tcp_conn_parms tcp_conn_parms;
-	
+tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
+
+int conn_number;
+
 // Sprites
 // Airplane up
 static const unsigned char spriteUp[] = {0x00,0x01,0x01,0x01,0x01,0x01,0x07,0x1F,
@@ -144,6 +149,16 @@ void initConnection(void)
 {
     int i, index=0, pos=0;
 
+    implementation_count=tcpip_enumerate();
+	if(implementation_count==0)
+    {
+        PrintString("Requires GR8NET cartridge for network access\r\n");
+		return;
+    }
+
+	/* set currently active implementation */
+	active_implementation=0;
+
     for(i=0; i<strlen(IPPort); i++)
     {
         char ch = IPPort[i];
@@ -156,24 +171,28 @@ void initConnection(void)
         {
             tmpString[pos]=0;
             if(index==0)
-                tcp_conn_parms.dest_ip[0]=atoi(tmpString);
+                tcp_conn_parms.dest_ip[0]=(char)atoi(tmpString);
             else
             if(index==1)
-                tcp_conn_parms.dest_ip[1]=atoi(tmpString);
+                tcp_conn_parms.dest_ip[1]=(char)atoi(tmpString);
             else
             if(index==2)
-                tcp_conn_parms.dest_ip[2]=atoi(tmpString);
+                tcp_conn_parms.dest_ip[2]=(char)atoi(tmpString);
             else
             if(index==3)
-                tcp_conn_parms.dest_ip[3]=atoi(tmpString);
+                tcp_conn_parms.dest_ip[3]=(char)atoi(tmpString);
             index++;
             pos=0;
         }
     }
     if(pos>0)
+    {
+        tmpString[pos]=0;
         tcp_conn_parms.dest_port=atoi(tmpString);
+    }
 
 	tcp_conn_parms.local_port=-1;
+    // Timeout 5 seconds
 	tcp_conn_parms.user_timeout=-1;
 	tcp_conn_parms.flags=0;
 }
@@ -240,6 +259,7 @@ void showList(void)
     }
 }
 
+/*
 void showStaticMetar(void)
 {
     char offset=0;
@@ -278,85 +298,93 @@ void showStaticMetar(void)
         tmpString[offset] = 0;
         PutText(30,40+line*12,tmpString,0);
     }
-}
+}*/
 
 void showNetworkMetar(void)
 {
-    tcpip_unapi_tcp_conn_parms state_tcp_conn_parms;
-    int a, i;
-    int conn_number;
+    int a, i, j, k;
+    char tcp_data[1024];
     char response[1024];
 
+    // 1 when HTTP content found after \r\n\r\n
+    char content=0;
     char offset=0;
     char line=0;
     int pos;
 
-    sprintf(tmpString,"GET /metar?icao=%s HTTP/1.0\r\nUser-Agent: RealADSB\r\nAccept: */*\r\nConnection: close\r\n\r\n", Airport);
-
+    sprintf(tcp_data,"GET /metar?icao=%s HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", Airport);
+    //const char tcp_data[]={"GET /metar?icao=KEWR HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n"};
+    //const	char	tcp_data[]={ "GET / HTTP/1.0\r\nUser-Agent: TCP/IP UNAPI test program\r\nAccept: */*;q=0.8\r\nAccept-Language: en-us,en;q=0.5\r\nConnection: close\r\n\r\n" };
     a=tcpip_tcp_open(&tcp_conn_parms, &conn_number);
-	if(a==ERR_OK)
+	if(a==ERR_OK || a==ERR_CONN_EXISTS)
 	{
-		a=tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
-		if(a==ERR_OK)
-		{
-			if(state_tcp_conn_parms.send_free_bytes>=sizeof(tmpString))
-			{
-				a=tcpip_tcp_send(conn_number,tmpString,sizeof(tmpString),0);
-				while((i=tcpip_tcp_state(conn_number,&state_tcp_conn_parms))==ERR_OK)
-				{
-					if((state_tcp_conn_parms.conn_state!=4) && state_tcp_conn_parms.incoming_bytes==0)
-					{
-						PutText(30,40,"TCP session finished",0);
-						break;
-					}
-					if(state_tcp_conn_parms.incoming_bytes!=0)
-					{
-						a=tcpip_tcp_rcv(conn_number, &response[0], 1024, &tcp_conn_parms);
-						if(a!=ERR_OK) 
-                            break;
-                        // Output
-                        for(pos=0;pos<state_tcp_conn_parms.incoming_bytes;pos++)
+        a = tcpip_tcp_state(conn_number, &state_tcp_conn_parms);
+        if(state_tcp_conn_parms.send_free_bytes>=sizeof(tcp_data))
+        {
+            a=tcpip_tcp_send(conn_number,tcp_data,sizeof(tcp_data),0);
+            for(k=0;k<100;k++)
+            {
+                j = tcpip_tcp_state(conn_number,&state_tcp_conn_parms);
+                if(state_tcp_conn_parms.conn_state!=4 && state_tcp_conn_parms.incoming_bytes==0)
+                {
+                    //PrintString("\r\nTCP session finished");
+                    break;
+                }
+                if(state_tcp_conn_parms.incoming_bytes!=0)
+                {
+                    a=tcpip_tcp_rcv(conn_number, &response[0], 1024, &tcp_conn_parms);
+                    if(a!=ERR_OK)
+                    { 
+                        sprintf(tmpString,"ERROR %d",a);
+                        PutText(30,52,tmpString,0);
+                        break;
+                    }
+                    for(pos=0;pos<tcp_conn_parms.incoming_bytes;pos++)
+                    {
+                        char ch=response[pos];
+                        if(ch=='\r' || ch=='\n')
                         {
-                            char ch=response[pos];
-                            if(ch=='\r' || ch=='\n')
+                            if(content==1 && offset>0)
                             {
-                                if(offset>0)
-                                {
-                                    tmpString[offset] = 0;
-                                    PutText(30,40+line*12,tmpString,0);
-                                    line++;
-                                    offset = 0;
-                                }
+                                tmpString[offset] = 0;
+                                PutText(30,40+line*12,tmpString,0);
+                                line++;
+                                offset = 0;
                             }
-                            else
+                            if(pos>2 && content==0 && ch=='\n' && response[pos-2]=='\n')
+                                content = 1;
+                        }
+                        else
+                        if(content==1)
+                        {
+                            tmpString[offset] = ch;
+                            offset++;
+                            // Soft length 45, hard length 55
+                            if((ch==' ' && offset>44) || offset==55)
                             {
-                                tmpString[offset] = ch;
-                                offset++;
-                                if(offset==50)
-                                {
-                                    tmpString[offset] = 0;
-                                    PutText(30,40+line*12,tmpString,0);
-                                    line++;
-                                    offset = 0;
-                                }
+                                tmpString[offset] = 0;
+                                PutText(30,40+line*12,tmpString,0);
+                                line++;
+                                offset = 0;
                             }
                         }
-					}
-				}
-			}
-			else PutText(30,40,"No enough space in TX buffer",0);
-		}
-        if(offset>0)
-        {
-            tmpString[offset] = 0;
-            PutText(30,40+line*12,tmpString,0);
+                    }
+                }
+                for(i=0;i<1000;i++);		// delay
+            }
+            if(offset>0)
+            {
+                tmpString[offset] = 0;
+                PutText(30,40+line*12,tmpString,0);
+            }
         }
 
 		a=tcpip_tcp_close(conn_number);
 	}
     else
     {
-        PutText(30,40,"Can't connect",0);
+        sprintf(tmpString,"Can't connect: %d %d %d", a, tcp_conn_parms.conn_state, tcp_conn_parms.close_reason);
+        PutText(30,40,tmpString,0);
     }
 }
 
@@ -396,8 +424,13 @@ void changeZoom(void)
 
 void loadTraffic(void)
 {
-    
+    GetTime(&tm);
+    sprintf(tmpString,"%d:%d:%d*",tm.hour,tm.min,tm.sec);
+    PutText(405,12,tmpString,0);
 
+    GetTime(&tm);
+    sprintf(tmpString,"%d:%d:%d ",tm.hour,tm.min,tm.sec);
+    PutText(405,12,tmpString,0);
 }
 
 void showSelected()
@@ -506,71 +539,25 @@ void loadConfiguration()
     }
 }
 
-void saveConfiguration()
-{
-    FT_SetName(&file, CfgName);
-    // Trying to open
-    if(fcb_open(&file) != FCB_SUCCESS)
-    {
-        // Can't open then create
-        if(fcb_create(&file) != FCB_SUCCESS)
-        {
-            printf("ERROR");
-            return;
-        }
-    }
-    fcb_write(&file, tmpString, strlen(tmpString));
-    fcb_close(&file);
-    printf("OK\r\nPress any key...");
-}
-
-int main(void) 
+void main(void) 
 {
     Screen(0);
     Width(80);
     PrintString("RealADSB 0.3 for MSX-DOS\r\n");
-    PrintString("--------------------\r\n");
-    PrintString("Requires GR8NET cartridge for network access\r\n");
-
+    PrintString("------------------------\r\n");
+    
     // Load configuration
     ftoa(Latitude,7,latString);
     ftoa(Longitude,7,lonString);
     printf("Loading configuration from %s...\r\n", CfgName);
     loadConfiguration();
-    //
-    printf("Airport ICAO code [%s]:", Airport);
-    if(InputString(tmpString, 6)==4)
-        StrCopy(Airport, tmpString);
-    printf("Your latitude [%s]:", latString);
-    if(InputString(tmpString, 20)>0)
-    {
-        StrCopy(latString, tmpString);
-        Latitude = atof(tmpString);
-    }
-    printf("Your longitude [%s]:", lonString);
-    if(InputString(tmpString, 20)>0)
-    {
-        StrCopy(lonString, tmpString);
-        Longitude = atof(tmpString);
-    }
-    printf("adsb_hub3 IP:port [%s]:", IPPort);
-    if(InputString(tmpString, 80)>0)
-        StrCopy(IPPort, tmpString);
 
-    printf("Writing configuration to %s...", CfgName);
-
-    // Save configuration
-    sprintf(tmpString,"%s\r\n%s\r\n%s\r\n%s\r\n", 
-        Airport, latString, lonString, IPPort);
-    saveConfiguration();
-    InputString(tmpString, 80);
+    // Initialize connection parameters
+    initConnection();
 
     // Setting 512x212 16 colors
     Screen(7);
 
-    // Initialize connection parameters
-    initConnection();
-    
     loadSprites();
     
     while(1)
@@ -579,13 +566,13 @@ int main(void)
         Cls();
 
         // TEST
-        PutSprite(0,12,10,10,15);
+     //   PutSprite(0,12,10,10,15);
 
         // Draw radar
         Line(256-210,106,256+210,106,15,0);
         Line(256,2,256,210,15,0);
-        Circle(256,106,105,15,0);
-        Circle(256,106,210,15,0);
+        //Circle(256,106,105,15,0);
+        //Circle(256,106,210,15,0);
 
         // Left top corner
         sprintf(tmpString,"Airport: %s", Airport);
@@ -603,6 +590,8 @@ int main(void)
         // Right top corner
         sprintf(tmpString,"%d.%d.%d.%d:%d", tcp_conn_parms.dest_ip[0], tcp_conn_parms.dest_ip[1], tcp_conn_parms.dest_ip[2], tcp_conn_parms.dest_ip[3], tcp_conn_parms.dest_port);
         PutText(365,2,tmpString,0);
+
+        loadTraffic();
 
         while(1)
         {
@@ -623,7 +612,7 @@ int main(void)
             if(key>47 && key<58)
             {
                 SelIndex = key-48;
-                showSelected();
+ //               showSelected();
             }
             else
             if(key==30 && Zoom>5)
@@ -641,7 +630,7 @@ int main(void)
             if(key=='q' || key=='Q')
             {
                 Screen(0);
-                return 0;
+                Exit(0);
             }
         }
     }
