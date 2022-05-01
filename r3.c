@@ -19,7 +19,7 @@ struct DD {
     char  XA[7]; // ICAO24
     float XB; // Latitude
     float XC; // Longitude
-    int XD; // Altitude, ft
+    unsigned int XD; // Altitude, ft
     char XE[9]; // Callsign
     int XF; // Heading
     int XG; // Speed, kts
@@ -31,7 +31,7 @@ struct DD {
     float XM; // Distance, mi
 };
 
-__at 0x8000 struct DD d[10];
+__at 0xa000 struct DD d[10];
 
 char Selected[7]="";
 int SelIndex;
@@ -199,6 +199,9 @@ void loadSprites(void)
 {
     SpriteReset();
 
+    Sprite16();
+    SpriteSmall();
+
     // Sprites separated by 4 for 16x16 
     // which is combination of 4 8x8 sprites 
     SetSpritePattern(0,spriteUp,32);
@@ -217,8 +220,6 @@ void loadSprites(void)
     SetSpritePattern(52,sprite9,32);
 
     SpriteOn();
-    Sprite16();
-    SpriteSmall();
 }
 
 void showList(void)
@@ -239,7 +240,7 @@ void showList(void)
         PutText(30,55+i*12,d[i].XE,0);
         PutText(110,55+i*12,d[i].XI,0);
         PutText(158,55+i*12,d[i].XJ,0);
-        sprintf(tmpString,"%d/%d",d[i].XD,d[i].XH);
+        sprintf(tmpString,"%u/%d",d[i].XD,d[i].XH);
         PutText(230,55+i*12,tmpString,0);
         sprintf(tmpString,"%d",d[i].XG);
         PutText(342,55+i*12,tmpString,0);
@@ -369,7 +370,7 @@ void showNetworkMetar(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
                         }
                     }
                 }
-                for(i=0;i<1000;i++);		// delay
+                for(i=0;i<500;i++);		// delay
             }
             if(offset>0)
             {
@@ -429,8 +430,11 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
     NumberOfAirplanes=0;
 
     GetTime(&tm);
-    sprintf(tmpString,"%d:%d:%d*",tm.hour,tm.min,tm.sec);
+    sprintf(tmpString,"%d:%s%d:%s%d*",tm.hour,tm.min<10?"0":"",tm.min,tm.sec<10?"0":"",tm.sec);
     PutText(405,12,tmpString,0);
+
+    // 730 is sizeof(DD)*10
+    memset(d, 0, 730);
 
     sprintf(tcp_data,"GET /a?lat=%s&lon=%s&num=10 HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", latString, lonString);
     a=tcpip_tcp_open(tcp_conn_parms, &conn_number);
@@ -464,6 +468,10 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
                         {
                             if(content==1 && offset>0)
                             {
+                                tmpString[offset]=0;
+                                // Last parameter before end of line is distance
+                                if(item==12)
+                                    d[NumberOfAirplanes].XM=atof(tmpString);
                                 NumberOfAirplanes++;
                                 item=0;
                                 offset = 0;
@@ -479,40 +487,51 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
                                 if(offset>0)
                                 {
                                     tmpString[offset]=0;
-                                    if(item==0)
-                                        StrCopy(d[NumberOfAirplanes].XA,tmpString);
-                                    if(item==1)
-                                        d[NumberOfAirplanes].XB=atof(tmpString)*100.0-Latitude*100.0;
-                                    if(item==2)
-                                        d[NumberOfAirplanes].XC=atof(tmpString)*100.0-Longitude*100.0;
-                                    if(item==3)
-                                        d[NumberOfAirplanes].XD=atoi(tmpString);
-                                    if(item==4)
-                                        StrCopy(d[NumberOfAirplanes].XE,tmpString);
-                                    if(item==5)
-                                        d[NumberOfAirplanes].XF=atoi(tmpString);
-                                    if(item==6)
-                                        d[NumberOfAirplanes].XG=atoi(tmpString);
-                                    if(item==7)
-                                        d[NumberOfAirplanes].XH=atoi(tmpString);
-                                    if(item==8)
-                                        StrCopy(d[NumberOfAirplanes].XI,tmpString);
-                                    if(item==9)
-                                        StrCopy(d[NumberOfAirplanes].XJ,tmpString);
-                                    if(item==10)
-                                        d[NumberOfAirplanes].XK=atoi(tmpString);
-                                    if(item==11)
+                                    switch(item)
                                     {
+                                    case 0:
+                                        StrCopy(d[NumberOfAirplanes].XA,tmpString);
+                                        break;
+                                    case 1:
+                                        d[NumberOfAirplanes].XB=atof(tmpString)*100.0-Latitude*100.0;
+                                        break;
+                                    case 2:
+                                        d[NumberOfAirplanes].XC=atof(tmpString)*100.0-Longitude*100.0;
+                                        break;
+                                    case 3:
+                                        d[NumberOfAirplanes].XD=atoi(tmpString);
+                                        break;
+                                    case 4:
+                                        StrCopy(d[NumberOfAirplanes].XE,tmpString);
+                                        break;
+                                    case 5:
+                                        d[NumberOfAirplanes].XF=atoi(tmpString);
+                                        break;
+                                    case 6:
+                                        d[NumberOfAirplanes].XG=atoi(tmpString);
+                                        break;
+                                    case 7:
+                                        d[NumberOfAirplanes].XH=atoi(tmpString);
+                                        break;
+                                    case 8:
+                                        StrCopy(d[NumberOfAirplanes].XI,tmpString);
+                                        break;
+                                    case 9:
+                                        StrCopy(d[NumberOfAirplanes].XJ,tmpString);
+                                        break;
+                                    case 10:
+                                        d[NumberOfAirplanes].XK=atoi(tmpString);
+                                        break;
+                                    case 11:
                                         if(strlen(tmpString)>8)
                                             strncpy(d[NumberOfAirplanes].XL,tmpString, 8);
                                         else
                                             StrCopy(d[NumberOfAirplanes].XL,tmpString);
+                                        break;
                                     }
-                                    if(item==12)
-                                        d[NumberOfAirplanes].XM=atof(tmpString);
                                     offset=0;
-                                    item++;
                                 }
+                                item++;
                             }
                             else
                             {
@@ -546,12 +565,12 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
             a=12;
         x = 120+(char)(d[pos].XC*ZX);
         y = 98-(char)(d[pos].XB*ZY);
-        PutSprite(pos,a,x,y,StrCompare(d[pos].XA,Selected)==0?10:15);
         PutSprite(pos*2,16+pos*4,x,y,10);
+        PutSprite(pos,a,x,y,StrCompare(d[pos].XA,Selected)==0?10:15);
     }
 
     GetTime(&tm);
-    sprintf(tmpString,"%d:%d:%d ",tm.hour,tm.min,tm.sec);
+    sprintf(tmpString,"%d:%s%d:%s%d ",tm.hour,tm.min<10?"0":"",tm.min,tm.sec<10?"0":"",tm.sec);
     PutText(405,12,tmpString,0);
 }
 
@@ -577,12 +596,13 @@ void showSelected()
     PutSprite(SelIndex,a,120+(char)(d[SelIndex].XC*ZX),98-(char)(d[SelIndex].XB*ZY),10);
     // Copy ICAO code of aircraft
     StrCopy(Selected, d[SelIndex].XA);
+    PutText(2,152,Selected,0);
     PutText(2,162,d[SelIndex].XE,0);
     PutText(2,172,d[SelIndex].XI,0);
     PutText(2,182,d[SelIndex].XJ,0);
-    sprintf(tmpString,"%dft %d", d[SelIndex].XD, d[SelIndex].XH);
+    sprintf(tmpString,"%dft %d   ", d[SelIndex].XD, d[SelIndex].XH);
     PutText(2,192,tmpString,0);
-    sprintf(tmpString,"%dkts", d[SelIndex].XG);
+    sprintf(tmpString,"%dkts   ", d[SelIndex].XG);
     PutText(2,202,tmpString,0);
 }
 
