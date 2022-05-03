@@ -17,8 +17,8 @@ char NumberOfAirplanes = 0;
 
 struct DD {
     char  XA[7]; // ICAO24
-    float XB; // Latitude
-    float XC; // Longitude
+    long XB; // Latitude
+    long XC; // Longitude
     unsigned int XD; // Altitude, ft
     char XE[9]; // Callsign
     int XF; // Heading
@@ -33,15 +33,18 @@ struct DD {
 
 __at 0xa000 struct DD d[10];
 
-char Selected[7]="";
-int SelIndex;
+__at 0xa400 char Selected[7]="";
+int SelIndex=-1;
 int Zoom = 20; // Zoom, mi
+float coeffX, coeffY;
 float ZX, ZY;
 
 char CfgName[20] = "REALADSB.CFG"; // Name of configuration file
 char Airport[6] = "KEWR"; // ICAO code of the airport
 float Latitude = 40.6924798; // Latitude of the airport
 float Longitude = -74.1686868; // Longitude of the airport
+long LatitudeL = 406924798; // Latitude of the airport (1/10000000deg)
+long LongitudeL = -741686868; // Longitude of the airport (1/10000000deg)
 char IPPort[80] = "192.168.1.153:5567"; // IP:port of adsb_hub3
 
 char tmpString[200];
@@ -65,7 +68,7 @@ static const unsigned char spriteRight[] = {0x00,0x03,0x03,0x03,0x03,0x41,0x61,0
 static const unsigned char spriteDown[] = {0x00,0x07,0x03,0x01,0x01,0x01,0x79,0x7F,
 0x1F,0x07,0x01,0x01,0x01,0x01,0x01,0x00,
 0x00,0xE0,0xC0,0x80,0x80,0x80,0x9E,0xFE,
-0xF8,0xE0,80,0x80,0x80,0x80,0x80,0x00};
+0xF8,0xE0,0x80,0x80,0x80,0x80,0x80,0x00};
 // Airplane left
 static const unsigned char spriteLeft[] = {0x00,0x00,0x00,0x01,0x01,0x03,0x03,0x7F,
 0x7F,0x03,0x03,0x01,0x01,0x00,0x00,0x00,
@@ -91,6 +94,53 @@ static const unsigned char sprite7[] = {0xE0,0x20,0x20,0x40,0x40,0x00,0x00,0x00,
 static const unsigned char sprite8[] = {0xE0,0xA0,0xE0,0xA0,0xE0,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 // Digit 9
 static const unsigned char sprite9[] = {0xE0,0xA0,0xE0,0x20,0xE0,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+
+// Sprite colors
+static const unsigned char whiteSprite[] = { 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15 };
+static const unsigned char yellowSprite[] = { 10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10 };
+static const unsigned char redSprite[] = { 6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 };
+ 
+long atol7(char *str)
+{
+   long result = 0;
+   char i;
+   char afterDot=255;
+ 
+   for(i=0; i<13; i++)
+   {
+       if(str[i]==0)
+           break;
+ 
+       if(i==0 && str[i]=='-')
+       {
+       }
+       else
+       if(str[i]=='.')
+       {
+           afterDot=0;
+       }
+       else
+       {
+           char n = str[i]-'0';
+           result = result*10+n;
+           if(afterDot<255)
+           {
+               afterDot++;
+               if(afterDot==7)
+                   break;
+           }
+       }
+   }
+   if(afterDot==255)
+       afterDot = 0;
+   for(i=afterDot; i<7; i++)
+       result = result*10;
+ 
+   if(str[0]=='-')
+       return -result;
+   else
+       return result;
+}
 
 // Big thanks to https://github.com/aralbrec (z88dk) for giving me an idea
 // x - the number to be converted
@@ -197,6 +247,8 @@ void initConnection(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 
 void loadSprites(void)
 {
+    int i;
+
     SpriteReset();
 
     Sprite16();
@@ -218,6 +270,10 @@ void loadSprites(void)
     SetSpritePattern(44,sprite7,32);
     SetSpritePattern(48,sprite8,32);
     SetSpritePattern(52,sprite9,32);
+
+    // Digits will be always yellow
+    for(i=10;i<20;i++)
+        SC8SpriteColors(i, yellowSprite);
 
     SpriteOn();
 }
@@ -433,9 +489,6 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
     sprintf(tmpString,"%d:%s%d:%s%d*",tm.hour,tm.min<10?"0":"",tm.min,tm.sec<10?"0":"",tm.sec);
     PutText(405,12,tmpString,0);
 
-    // 730 is sizeof(DD)*10
-    memset(d, 0, 730);
-
     sprintf(tcp_data,"GET /a?lat=%s&lon=%s&num=10 HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", latString, lonString);
     a=tcpip_tcp_open(tcp_conn_parms, &conn_number);
 	if(a==ERR_OK || a==ERR_CONN_EXISTS)
@@ -472,9 +525,12 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
                                 // Last parameter before end of line is distance
                                 if(item==12)
                                     d[NumberOfAirplanes].XM=atof(tmpString);
-                                NumberOfAirplanes++;
                                 item=0;
                                 offset = 0;
+                                NumberOfAirplanes++;
+                                // 10 is all we need
+                                if(NumberOfAirplanes==10)
+                                    break;
                             }
                             if(pos>2 && content==0 && ch=='\n' && response[pos-2]=='\n')
                                 content = 1;
@@ -490,13 +546,16 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
                                     switch(item)
                                     {
                                     case 0:
+                                        // Cleanup data structure before filling up
+                                        // 73 is sizeof(DD)
+                                        memset(&d[NumberOfAirplanes], 0, 73);
                                         StrCopy(d[NumberOfAirplanes].XA,tmpString);
                                         break;
                                     case 1:
-                                        d[NumberOfAirplanes].XB=atof(tmpString)*100.0-Latitude*100.0;
+                                        d[NumberOfAirplanes].XB=atol7(tmpString)-LatitudeL;
                                         break;
                                     case 2:
-                                        d[NumberOfAirplanes].XC=atof(tmpString)*100.0-Longitude*100.0;
+                                        d[NumberOfAirplanes].XC=atol7(tmpString)-LongitudeL;
                                         break;
                                     case 3:
                                         d[NumberOfAirplanes].XD=atoi(tmpString);
@@ -563,10 +622,13 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
             a=8;
         if(d[pos].XF>225 && d[pos].XF<316)
             a=12;
-        x = 120+(char)(d[pos].XC*ZX);
-        y = 98-(char)(d[pos].XB*ZY);
-        PutSprite(pos*2,16+pos*4,x,y,10);
+        x = 120+(char)((float)d[pos].XC/ZX);
+        y = 98-(char)((float)d[pos].XB/ZY);
+        // Digit
+        PutSprite(10+pos,16+pos*4,x,y,10);
+        // Airplane
         PutSprite(pos,a,x,y,StrCompare(d[pos].XA,Selected)==0?10:15);
+        SC8SpriteColors(pos, StrCompare(d[pos].XA,Selected)==0?redSprite:whiteSprite);
     }
 
     GetTime(&tm);
@@ -578,8 +640,8 @@ void changeZoom(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 {
     sprintf(tmpString,"R:  %dmi  ",Zoom);
     PutText(435,172,tmpString,0);
-    ZX=69.172*cosf(Latitude*3.14159/180)*1.05/(float)Zoom;
-    ZY=69*1.05/(float)Zoom;
+    ZX=coeffX*(float)Zoom;
+    ZY=coeffY*(float)Zoom;
     loadTraffic(tcp_conn_parms);
     return;
 }
@@ -587,20 +649,25 @@ void changeZoom(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
 void showSelected()
 {
     char a=0;
+    
+    if(SelIndex>=NumberOfAirplanes)
+        return;
+
     if(d[SelIndex].XF>44 && d[SelIndex].XF<136)
         a=4;
     if(d[SelIndex].XF>135 && d[SelIndex].XF<226)
         a=8;
     if(d[SelIndex].XF>225 && d[SelIndex].XF<316)
         a=12;
-    PutSprite(SelIndex,a,120+(char)(d[SelIndex].XC*ZX),98-(char)(d[SelIndex].XB*ZY),10);
+    PutSprite(SelIndex,a,120+(char)((float)d[SelIndex].XC/ZX),98-(char)((float)d[SelIndex].XB/ZY),10);
+    SC8SpriteColors(SelIndex, redSprite);
     // Copy ICAO code of aircraft
     StrCopy(Selected, d[SelIndex].XA);
     PutText(2,152,Selected,0);
     PutText(2,162,d[SelIndex].XE,0);
     PutText(2,172,d[SelIndex].XI,0);
     PutText(2,182,d[SelIndex].XJ,0);
-    sprintf(tmpString,"%dft %d   ", d[SelIndex].XD, d[SelIndex].XH);
+    sprintf(tmpString,"%dft %dft/min   ", d[SelIndex].XD, d[SelIndex].XH);
     PutText(2,192,tmpString,0);
     sprintf(tmpString,"%dkts   ", d[SelIndex].XG);
     PutText(2,202,tmpString,0);
@@ -697,6 +764,17 @@ void loadConfiguration()
             }
         }
         fcb_close(&file);
+ 
+       if(strlen(latString)>0)
+       {
+           Latitude = atof(latString);
+           LatitudeL = atol7(latString);
+       }
+       if(strlen(lonString)>0)
+       {
+           Longitude = atof(lonString);
+           LongitudeL = atol7(lonString);
+       }
     }
 }
 
@@ -722,6 +800,11 @@ void main(void)
     Screen(7);
 
     loadSprites();
+
+    // Static part of calculations: pixels per 1/10000000deg
+    coeffX=1e5/(69.172*cosf(Latitude*3.14159/180)*1.05);
+    coeffY=1e5/(69*1.05);
+ 
     
     while(1)
     {
@@ -771,6 +854,8 @@ void main(void)
             else
             if(key>47 && key<58)
             {
+                if(SelIndex>=0)
+                    SC8SpriteColors(SelIndex, whiteSprite);
                 SelIndex = key-48;
                 showSelected();
             }
