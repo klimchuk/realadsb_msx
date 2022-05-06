@@ -520,7 +520,7 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
     sprintf(tmpString,"%d:%s%d:%s%d*",tm.hour,tm.min<10?"0":"",tm.min,tm.sec<10?"0":"",tm.sec);
     PutText(405,12,tmpString,0);
 
-    sprintf(tcp_data,"GET /a?lat=%s&lon=%s&num=10 HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", latString, lonString);
+    sprintf(tcp_data,"GET /a?lat=%s&lon=%s&num=10&range=%d HTTP/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", latString, lonString, Zoom);
     a=tcpip_tcp_open(tcp_conn_parms, &conn_number);
 	if(a==ERR_OK || a==ERR_CONN_EXISTS)
 	{
@@ -663,7 +663,7 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
         k = StrCompare(d[pos].XA,Selected);
         PutSprite(pos,a,x,y,k==0?10:15);
         SC8SpriteColors(pos,k==0?redSprite:whiteSprite);
-        if(a==0)
+        if(k==0)
             SelIndex = pos;
     }
 
