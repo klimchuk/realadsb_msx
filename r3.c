@@ -98,8 +98,8 @@ static const unsigned char sprite9[] = {0xE0,0xA0,0xE0,0x20,0xE0,0x00,0x00,0x00,
 // Sprite colors
 static const unsigned char whiteSprite[] = { 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15 };
 static const unsigned char yellowSprite[] = { 10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10 };
-static const unsigned char redSprite[] = { 6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 };
- 
+static const unsigned char redSprite[] = { 6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6 }; 
+
 long atol7(char *str)
 {
    long result = 0L;
@@ -271,8 +271,8 @@ void loadSprites(void)
     SetSpritePattern(48,sprite8,32);
     SetSpritePattern(52,sprite9,32);
 
-    // Digits will be always yellow
-    for(i=10;i<20;i++)
+    // Digits will be always yellow starting with 12
+    for(i=12;i<22;i++)
         SC8SpriteColors(i, yellowSprite);
 
     SpriteOn();
@@ -448,7 +448,7 @@ void showMetar(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
     char i;
 
     // Hide all sprites
-    for(i=0; i<20; i++)
+    for(i=0; i<23; i++)
         PutSprite(i,0,-32,-32,15);
 
     SetColors(10,1,4);
@@ -658,13 +658,19 @@ void loadTraffic(tcpip_unapi_tcp_conn_parms *tcp_conn_parms)
         x = 120+(char)(d[pos].XC/ZX);
         y = 98-(char)(d[pos].XB/ZY);
         // Digit
-        PutSprite(10+pos,16+pos*4,x,y,10);
+        PutSprite(12+pos,16+pos*4,x,y,10);
         // Airplane
         k = StrCompare(d[pos].XA,Selected);
         PutSprite(pos,a,x,y,k==0?10:15);
         SC8SpriteColors(pos,k==0?redSprite:whiteSprite);
         if(k==0)
             SelIndex = pos;
+    }
+    // Cleanup sprites if number of airplanes decreased
+    for(j=pos;j<10;j++)
+    {
+        PutSprite(12+j,16+j*4,-32,-32,10);
+        PutSprite(j,0,-32,-32,15);        
     }
 
     GetTime(&tm);
